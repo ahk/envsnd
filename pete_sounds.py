@@ -179,23 +179,22 @@ def main():
                 print("Warning: Failed to capture frame", file=sys.stderr)
                 continue
 
-            # Format prompt with system context
-            user_prompt = f"{system_prompt}\n\nDescribe this frame with short director messages:"
+            # Format prompt - keep it minimal for structured output
             formatted_prompt = apply_chat_template(
                 processor,
                 config,
-                user_prompt,
+                system_prompt,
                 num_images=1
             )
 
-            # Run streaming inference
+            # Run streaming inference with low temperature for consistency
             for result in stream_generate(
                 model,
                 processor,
                 formatted_prompt,
                 image=[frame],
                 max_tokens=args.max_tokens,
-                temperature=0.7,
+                temperature=0.4,
             ):
                 # Output tokens to stdout as they're generated
                 if hasattr(result, 'text'):
