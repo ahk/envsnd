@@ -7,3 +7,6 @@ venv/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Performance recordings and scores
+performances/

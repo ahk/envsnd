@@ -25,30 +25,54 @@ from pathlib import Path
 
 
 def parse_args():
+    # Generate default performance directory name based on timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    performance_dir = f"performances/performance_{timestamp}"
+    default_score = f"{performance_dir}/score.txt"
+    default_record = f"{performance_dir}/recording.mp3"
+    
     parser = argparse.ArgumentParser(
         description="Pete: Real-time video-to-soundtrack pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
-    python3 pete.py                              # Run with audio output
-    python3 pete.py --record session.mp3         # Record to MP3
-    python3 pete.py --score score.txt            # Save score to file
+    python3 pete.py                              # Run with defaults (score + MP3 in performance dir)
+    python3 pete.py --name my_session            # Custom performance name
+    python3 pete.py --record session.mp3         # Custom MP3 filename
+    python3 pete.py --score score.txt            # Custom score filename (MP3 auto-matches)
+    python3 pete.py --no-score --no-record       # Disable file output
     python3 pete.py --model 500m --bpm 160       # Faster model, slower tempo
 
 Press Ctrl-C to stop. Audio will be saved on graceful shutdown.
         """
     )
     parser.add_argument(
-        '--record', '-r',
+        '--name', '-n',
         type=str,
         default=None,
-        help='Record audio to MP3 file'
+        help='Performance name (default: performance_TIMESTAMP)'
+    )
+    parser.add_argument(
+        '--record', '-r',
+        type=str,
+        default=None,  # Will be set based on score if not specified
+        help='Record audio to MP3 file (default: auto-generated in performance directory)'
     )
     parser.add_argument(
         '--score', '-s',
         type=str,
-        default=None,
-        help='Save score to file (default: stdout only)'
+        default=default_score,
+        help=f'Save score to file (default: {default_score})'
+    )
+    parser.add_argument(
+        '--no-score',
+        action='store_true',
+        help='Disable score file output (use stdout only)'
+    )
+    parser.add_argument(
+        '--no-record',
+        action='store_true',
+        help='Disable MP3 recording'
     )
     parser.add_argument(
         '--model', '-m',
@@ -86,7 +110,29 @@ Press Ctrl-C to stop. Audio will be saved on graceful shutdown.
         action='store_true',
         help='Disable audio playback'
     )
-    return parser.parse_args()
+    
+    args = parser.parse_args()
+    
+    # If custom name provided, update default paths
+    if args.name:
+        performance_dir = f"performances/{args.name}"
+        # Only update score if it's still the default (user didn't override)
+        if not args.no_score and args.score == default_score:
+            args.score = f"{performance_dir}/score.txt"
+        # Only update record if it wasn't explicitly set
+        if args.record is None and not args.no_record:
+            args.record = f"{performance_dir}/recording.mp3"
+    
+    # If score is enabled and record not explicitly set, make MP3 match score location
+    if not args.no_score and not args.no_record and args.record is None:
+        score_path = Path(args.score)
+        # If score is in a directory, put MP3 in same directory
+        if score_path.parent != Path('.'):
+            args.record = str(score_path.parent / "recording.mp3")
+        else:
+            args.record = str(score_path.with_suffix('.mp3'))
+    
+    return args
 
 
 class Pipeline:
@@ -99,6 +145,16 @@ class Pipeline:
         self.running = False
         self.score_file = None
         self.start_time = None
+
+        # Handle score file: use default unless --no-score is set
+        if args.no_score:
+            self.score_path = None
+        else:
+            self.score_path = args.score
+        
+        # Handle recording: disable if --no-record is set
+        if args.no_record:
+            self.args.record = None
 
         # Select prompt file
         if args.prompt:
@@ -138,10 +194,25 @@ class Pipeline:
         self.running = True
         self.start_time = time.time()
 
+        # Create performance directory if needed
+        if self.score_path:
+            score_path_obj = Path(self.score_path)
+            performance_dir = score_path_obj.parent
+            if performance_dir != Path('.') and not performance_dir.exists():
+                performance_dir.mkdir(parents=True, exist_ok=True)
+                self.log("sys", f"Created performance directory: {performance_dir}")
+        
+        if self.args.record:
+            record_path_obj = Path(self.args.record)
+            performance_dir = record_path_obj.parent
+            if performance_dir != Path('.') and not performance_dir.exists():
+                performance_dir.mkdir(parents=True, exist_ok=True)
+                self.log("sys", f"Created performance directory: {performance_dir}")
+
         # Open score file if specified
-        if self.args.score:
-            self.score_file = open(self.args.score, 'w')
-            self.log("sys", f"Score file: {self.args.score}")
+        if self.score_path:
+            self.score_file = open(self.score_path, 'w')
+            self.log("sys", f"Score file: {self.score_path}")
 
         # Print header
         print("=" * 70, flush=True)
@@ -151,7 +222,7 @@ class Pipeline:
         print(f"  Prompt:     {self.prompt_file}", flush=True)
         print(f"  BPM:        {self.args.bpm}", flush=True)
         print(f"  Recording:  {self.args.record or 'disabled'}", flush=True)
-        print(f"  Score file: {self.args.score or 'stdout only'}", flush=True)
+        print(f"  Score file: {self.score_path or 'stdout only'}", flush=True)
         print("=" * 70, flush=True)
         print("  Press Ctrl-C to stop", flush=True)
         print("=" * 70, flush=True)
@@ -324,10 +395,13 @@ class Pipeline:
                     pass
 
         # Wait for processes to finish (with timeout)
+        # Give composer more time to save MP3 recording
         for name, proc in [("director", self.director_proc), ("composer", self.composer_proc)]:
             if proc:
                 try:
-                    proc.wait(timeout=5)
+                    # Composer needs more time to save MP3 file
+                    timeout = 15 if name == "composer" and self.args.record else 5
+                    proc.wait(timeout=timeout)
                     self.log("sys", f"{name.capitalize()} stopped")
                 except subprocess.TimeoutExpired:
                     proc.kill()
@@ -335,7 +409,7 @@ class Pipeline:
 
         # Close score file
         if self.score_file:
-            self.log("sys", f"Score saved to {self.args.score}")
+            self.log("sys", f"Score saved to {self.score_path}")
             self.score_file.close()
 
         self.log("sys", "Pipeline terminated")
