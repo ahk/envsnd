@@ -1,16 +1,27 @@
 #!/bin/bash
-# FastVLM Installation Script for M4 Pro MacBook (48GB RAM)
-# Optimized for lowest possible TBT (Time Between Tokens) latency
+# Pete-Sounds Installation Script for M4 Pro MacBook (48GB RAM)
 # Self-contained: all files stay within this directory (except brew packages)
 #
 # Usage:
-#   ./install.sh         Install dependencies and download model
-#   ./install.sh clean   Remove all downloaded/built files
+#   ./install.sh              Install deps and download default model (2.2b)
+#   ./install.sh [MODEL]      Install deps and download specific model
+#   ./install.sh all          Install deps and download all models
+#   ./install.sh clean        Remove all downloaded/built files
+#
+# Models: 256m, 500m, 2.2b
 
 set -e
 
 cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
+
+# Model definitions
+declare -A MODELS
+MODELS[256m]="mlx-community/SmolVLM2-256M-Video-Instruct-mlx"
+MODELS[500m]="mlx-community/SmolVLM2-500M-Video-Instruct-mlx"
+MODELS[2.2b]="mlx-community/SmolVLM2-2.2B-Instruct-mlx"
+
+DEFAULT_MODEL="2.2b"
 
 # Handle clean command
 if [[ "${1}" == "clean" ]]; then
@@ -29,7 +40,6 @@ if [[ "${1}" == "clean" ]]; then
 fi
 
 echo "=== Pete-Sounds: SmolVLM2 Installation ==="
-echo "Optimizing for M4 Pro with 48GB RAM"
 echo ""
 
 # Check if running on macOS with Apple Silicon
@@ -72,33 +82,46 @@ echo "Installing dependencies..."
 # torch + torchvision + num2words required for SmolVLM2 video processor
 uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torchvision num2words
 
+# Determine which models to download
+if [[ "${1}" == "all" ]]; then
+    DOWNLOAD_MODELS=("256m" "500m" "2.2b")
+elif [[ -n "${1}" ]]; then
+    if [[ -z "${MODELS[${1}]}" ]]; then
+        echo "Error: Unknown model '${1}'"
+        echo "Available models: 256m, 500m, 2.2b, all"
+        exit 1
+    fi
+    DOWNLOAD_MODELS=("${1}")
+else
+    DOWNLOAD_MODELS=("$DEFAULT_MODEL")
+fi
+
 echo ""
-echo "Downloading SmolVLM2 model (500M BF16)..."
-echo "Model: mlx-community/SmolVLM2-2.2B-Instruct-mlx"
+echo "Downloading model(s): ${DOWNLOAD_MODELS[*]}"
 echo ""
 
-# Pre-download the model to cache
-# Using SmolVLM2 - proven to work with mlx-vlm for real-time webcam
-# FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)
-venv/bin/python -c "
+for model_key in "${DOWNLOAD_MODELS[@]}"; do
+    model_path="${MODELS[$model_key]}"
+    echo "Downloading $model_key ($model_path)..."
+    venv/bin/python -c "
 from mlx_vlm import load
-print('Downloading and caching SmolVLM2-2.2B-Instruct-mlx...')
-model, processor = load('mlx-community/SmolVLM2-2.2B-Instruct-mlx')
-print('Model cached successfully!')
+model, processor = load('$model_path')
+print('  Cached successfully!')
 "
+done
 
 echo ""
 echo "=== Installation Complete ==="
 echo ""
-echo "Model Selection Rationale:"
-echo "  - SmolVLM2-500M: Smallest available VLM (500M parameters)"
-echo "  - BF16 precision (plenty of headroom with 48GB RAM)"
-echo "  - Video-Instruct variant optimized for streaming frames"
-echo "  - FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)"
+echo "Available models:"
+echo "  256m - Fastest, prose output only"
+echo "  500m - Fast, prose output only"
+echo "  2.2b - Slower, follows structured format"
 echo ""
-echo "To run the inference program:"
+echo "To run:"
 echo "  source venv/bin/activate"
-echo "  python3 pete_sounds.py"
+echo "  python3 pete_sounds.py              # Uses 2.2b (default)"
+echo "  python3 pete_sounds.py --model 256m # Fastest"
 echo ""
 echo "Self-contained installation:"
 echo "  - Python + packages:  ./venv/"
@@ -106,5 +129,5 @@ echo "  - Model cache:        ./.hf_cache/"
 echo ""
 echo "To completely remove:"
 echo "  rm -rf $PROJECT_DIR"
-echo "  brew uninstall uv  # optional, if you don't need uv elsewhere"
+echo "  brew uninstall uv  # optional"
 echo ""

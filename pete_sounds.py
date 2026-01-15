@@ -24,19 +24,57 @@ os.environ.setdefault("HF_HOME", str(Path(__file__).parent / ".hf_cache"))
 import cv2
 from PIL import Image
 
+# Available models and their default prompts
+MODELS = {
+    "256m": {
+        "path": "mlx-community/SmolVLM2-256M-Video-Instruct-mlx",
+        "prompt": "prompts/smolvlm2-256m.md",
+        "description": "Fastest, prose output only",
+    },
+    "500m": {
+        "path": "mlx-community/SmolVLM2-500M-Video-Instruct-mlx",
+        "prompt": "prompts/smolvlm2-500m.md",
+        "description": "Fast, prose output only",
+    },
+    "2.2b": {
+        "path": "mlx-community/SmolVLM2-2.2B-Instruct-mlx",
+        "prompt": "prompts/smolvlm2-2.2b.md",
+        "description": "Slower, follows structured format",
+    },
+}
+
+DEFAULT_MODEL = "2.2b"
+
 
 def parse_args():
+    model_help = "Model to use:\n" + "\n".join(
+        f"  {k}: {v['description']}" for k, v in MODELS.items()
+    )
+
     parser = argparse.ArgumentParser(
         description="Pete-Sounds: Real-time video director for soundtrack generation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
+Models:
+  256m  - Fastest, prose output only
+  500m  - Fast, prose output only
+  2.2b  - Slower, follows structured format (default)
+
 Examples:
-    python3 pete_sounds.py                    # Run with defaults
+    python3 pete_sounds.py                    # Run with 2.2B (structured output)
+    python3 pete_sounds.py --model 256m       # Fastest, prose captions
     python3 pete_sounds.py --resolution 64    # Ultra-low latency mode
     python3 pete_sounds.py --max-tokens 20    # Shorter responses
 
 Press Ctrl-C to exit at any time.
         """
+    )
+    parser.add_argument(
+        "--model", "-m",
+        type=str,
+        choices=list(MODELS.keys()),
+        default=DEFAULT_MODEL,
+        help=f"Model size (default: {DEFAULT_MODEL})"
     )
     parser.add_argument(
         "--resolution", "-r",
@@ -53,8 +91,8 @@ Press Ctrl-C to exit at any time.
     parser.add_argument(
         "--prompt-file", "-p",
         type=str,
-        default="DIRECTOR.md",
-        help="Path to prompt file (default: DIRECTOR.md)"
+        default=None,
+        help="Path to prompt file (default: auto-select based on model)"
     )
     parser.add_argument(
         "--camera", "-c",
@@ -110,12 +148,21 @@ def main():
 
     setup_signal_handler()
 
+    # Get model config
+    model_config = MODELS[args.model]
+    model_path = model_config["path"]
+
+    # Auto-select prompt if not specified
+    prompt_file = args.prompt_file or model_config["prompt"]
+
     print("=" * 60, file=sys.stderr)
     print("Pete-Sounds: Real-time Video Director", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
+    print(f"Model: {args.model} ({model_config['description']})", file=sys.stderr)
     print(f"Resolution: {args.resolution}x{args.resolution}", file=sys.stderr)
     print(f"Max tokens: {args.max_tokens}", file=sys.stderr)
     print(f"Target FPS: {args.fps}", file=sys.stderr)
+    print(f"Prompt: {prompt_file}", file=sys.stderr)
     print("", file=sys.stderr)
     print("Press Ctrl-C to exit", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
@@ -123,10 +170,10 @@ def main():
 
     # Load prompt
     print("Loading director prompt...", file=sys.stderr)
-    system_prompt = load_prompt(args.prompt_file)
+    system_prompt = load_prompt(prompt_file)
 
     # Load model
-    print("Loading SmolVLM2 model (this may take a moment)...", file=sys.stderr)
+    print(f"Loading {model_path} (this may take a moment)...", file=sys.stderr)
     try:
         from mlx_vlm import load, stream_generate
         from mlx_vlm.prompt_utils import apply_chat_template
@@ -135,7 +182,6 @@ def main():
         print("Error: mlx-vlm not installed. Run ./install.sh first.", file=sys.stderr)
         sys.exit(1)
 
-    model_path = "mlx-community/SmolVLM2-2.2B-Instruct-mlx"
     model, processor = load(model_path)
     config = load_config(model_path)
 
