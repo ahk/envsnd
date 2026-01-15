@@ -73,8 +73,8 @@ echo "Installing dependencies..."
 uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torchvision num2words
 
 echo ""
-echo "Downloading SmolVLM2 model (256M BF16)..."
-echo "Model: mlx-community/SmolVLM2-256M-Video-Instruct-mlx"
+echo "Downloading SmolVLM2 model (500M BF16)..."
+echo "Model: mlx-community/SmolVLM2-500M-Video-Instruct-mlx"
 echo ""
 
 # Pre-download the model to cache
@@ -82,8 +82,8 @@ echo ""
 # FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)
 venv/bin/python -c "
 from mlx_vlm import load
-print('Downloading and caching SmolVLM2-256M-Video-Instruct-mlx...')
-model, processor = load('mlx-community/SmolVLM2-256M-Video-Instruct-mlx')
+print('Downloading and caching SmolVLM2-500M-Video-Instruct-mlx...')
+model, processor = load('mlx-community/SmolVLM2-500M-Video-Instruct-mlx')
 print('Model cached successfully!')
 "
 
@@ -91,7 +91,7 @@ echo ""
 echo "=== Installation Complete ==="
 echo ""
 echo "Model Selection Rationale:"
-echo "  - SmolVLM2-256M: Smallest available VLM (256M parameters)"
+echo "  - SmolVLM2-500M: Smallest available VLM (500M parameters)"
 echo "  - BF16 precision (plenty of headroom with 48GB RAM)"
 echo "  - Video-Instruct variant optimized for streaming frames"
 echo "  - FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)"
