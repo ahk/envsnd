@@ -72,15 +72,17 @@ echo "Installing dependencies..."
 uv pip install --python venv/bin/python mlx-vlm opencv-python pillow
 
 echo ""
-echo "Downloading FastVLM model (0.5B FP16 - optimal for low latency)..."
-echo "Model: apple/FastVLM-0.5B-fp16"
+echo "Downloading FastVLM model (0.5B 8-bit)..."
+echo "Model: InsightKeeper/FastVLM-0.5B-MLX-8bit"
 echo ""
 
 # Pre-download the model to cache
+# Using InsightKeeper's MLX-converted models for mlx-vlm compatibility
+# (Apple's FP16 models have weight format issues with current mlx-vlm)
 venv/bin/python -c "
 from mlx_vlm import load
-print('Downloading and caching FastVLM-0.5B-fp16...')
-model, processor = load('apple/FastVLM-0.5B-fp16')
+print('Downloading and caching FastVLM-0.5B-MLX-8bit...')
+model, processor = load('InsightKeeper/FastVLM-0.5B-MLX-8bit')
 print('Model cached successfully!')
 "
 
@@ -88,9 +90,9 @@ echo ""
 echo "=== Installation Complete ==="
 echo ""
 echo "Model Selection Rationale:"
-echo "  - FastVLM-0.5B-fp16: Smallest model with full precision"
+echo "  - FastVLM-0.5B-MLX-8bit: Smallest model, 8-bit precision"
 echo "  - 85x faster TTFT than comparable models"
-echo "  - FP16 chosen over INT4/INT8 for quality with 48GB RAM headroom"
+echo "  - 8-bit used due to mlx-vlm compatibility (see ISSUES.md)"
 echo "  - Optimized FastViTHD encoder outputs fewer tokens"
 echo ""
 echo "To run the inference program:"

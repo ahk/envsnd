@@ -135,7 +135,7 @@ def main():
         print("Error: mlx-vlm not installed. Run ./install.sh first.", file=sys.stderr)
         sys.exit(1)
 
-    model_path = "apple/FastVLM-0.5B-fp16"
+    model_path = "InsightKeeper/FastVLM-0.5B-MLX-8bit"
     model, processor = load(model_path)
     config = load_config(model_path)
 
