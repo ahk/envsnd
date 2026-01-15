@@ -2,8 +2,8 @@
 """
 Pete-Sounds: Real-time video-to-text director for soundtrack generation.
 
-Runs FastVLM inference on webcam feed, outputting director cues for a composer.
-Optimized for sub-20ms TBT latency on Apple Silicon.
+Runs SmolVLM2 inference on webcam feed, outputting director cues for a composer.
+Optimized for low latency on Apple Silicon.
 
 Usage:
     python3 pete_sounds.py [--help] [--resolution SIZE] [--max-tokens N]
@@ -126,7 +126,7 @@ def main():
     system_prompt = load_prompt(args.prompt_file)
 
     # Load model
-    print("Loading FastVLM model (this may take a moment)...", file=sys.stderr)
+    print("Loading SmolVLM2 model (this may take a moment)...", file=sys.stderr)
     try:
         from mlx_vlm import load, stream_generate
         from mlx_vlm.prompt_utils import apply_chat_template
@@ -135,7 +135,7 @@ def main():
         print("Error: mlx-vlm not installed. Run ./install.sh first.", file=sys.stderr)
         sys.exit(1)
 
-    model_path = "InsightKeeper/FastVLM-0.5B-MLX-8bit"
+    model_path = "mlx-community/SmolVLM2-256M-Video-Instruct-mlx"
     model, processor = load(model_path)
     config = load_config(model_path)
 

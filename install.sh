@@ -28,7 +28,7 @@ if [[ "${1}" == "clean" ]]; then
     exit 0
 fi
 
-echo "=== Pete-Sounds: FastVLM Installation ==="
+echo "=== Pete-Sounds: SmolVLM2 Installation ==="
 echo "Optimizing for M4 Pro with 48GB RAM"
 echo ""
 
@@ -69,20 +69,21 @@ echo "Creating Python 3.12 virtual environment..."
 uv venv --python 3.12 venv
 
 echo "Installing dependencies..."
-uv pip install --python venv/bin/python mlx-vlm opencv-python pillow
+# torch + torchvision + num2words required for SmolVLM2 video processor
+uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torchvision num2words
 
 echo ""
-echo "Downloading FastVLM model (0.5B 8-bit)..."
-echo "Model: InsightKeeper/FastVLM-0.5B-MLX-8bit"
+echo "Downloading SmolVLM2 model (256M BF16)..."
+echo "Model: mlx-community/SmolVLM2-256M-Video-Instruct-mlx"
 echo ""
 
 # Pre-download the model to cache
-# Using InsightKeeper's MLX-converted models for mlx-vlm compatibility
-# (Apple's FP16 models have weight format issues with current mlx-vlm)
+# Using SmolVLM2 - proven to work with mlx-vlm for real-time webcam
+# FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)
 venv/bin/python -c "
 from mlx_vlm import load
-print('Downloading and caching FastVLM-0.5B-MLX-8bit...')
-model, processor = load('InsightKeeper/FastVLM-0.5B-MLX-8bit')
+print('Downloading and caching SmolVLM2-256M-Video-Instruct-mlx...')
+model, processor = load('mlx-community/SmolVLM2-256M-Video-Instruct-mlx')
 print('Model cached successfully!')
 "
 
@@ -90,10 +91,10 @@ echo ""
 echo "=== Installation Complete ==="
 echo ""
 echo "Model Selection Rationale:"
-echo "  - FastVLM-0.5B-MLX-8bit: Smallest model, 8-bit precision"
-echo "  - 85x faster TTFT than comparable models"
-echo "  - 8-bit used due to mlx-vlm compatibility (see ISSUES.md)"
-echo "  - Optimized FastViTHD encoder outputs fewer tokens"
+echo "  - SmolVLM2-256M: Smallest available VLM (256M parameters)"
+echo "  - BF16 precision (plenty of headroom with 48GB RAM)"
+echo "  - Video-Instruct variant optimized for streaming frames"
+echo "  - FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)"
 echo ""
 echo "To run the inference program:"
 echo "  source venv/bin/activate"
