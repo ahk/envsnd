@@ -1,8 +1,32 @@
 #!/bin/bash
 # FastVLM Installation Script for M4 Pro MacBook (48GB RAM)
 # Optimized for lowest possible TBT (Time Between Tokens) latency
+# Self-contained: all files stay within this directory (except brew packages)
+#
+# Usage:
+#   ./install.sh         Install dependencies and download model
+#   ./install.sh clean   Remove all downloaded/built files
 
 set -e
+
+cd "$(dirname "$0")"
+PROJECT_DIR="$(pwd)"
+
+# Handle clean command
+if [[ "${1}" == "clean" ]]; then
+    echo "Cleaning ephemeral files..."
+    rm -rf "$PROJECT_DIR/venv"
+    rm -rf "$PROJECT_DIR/.hf_cache"
+    rm -rf "$PROJECT_DIR/__pycache__"
+    echo "Removed:"
+    echo "  - venv/"
+    echo "  - .hf_cache/"
+    echo "  - __pycache__/"
+    echo ""
+    echo "To also remove uv (installed via Homebrew):"
+    echo "  brew uninstall uv"
+    exit 0
+fi
 
 echo "=== Pete-Sounds: FastVLM Installation ==="
 echo "Optimizing for M4 Pro with 48GB RAM"
@@ -19,34 +43,41 @@ if [[ "$(uname -m)" != "arm64" ]]; then
     exit 1
 fi
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo "Creating Python virtual environment..."
-    python3 -m venv venv
+# Check for Homebrew
+if ! command -v brew &> /dev/null; then
+    echo "Error: Homebrew is required but not installed."
+    echo ""
+    echo "Install Homebrew from https://brew.sh:"
+    echo '  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    echo ""
+    echo "Then run this script again."
+    exit 1
 fi
 
-echo "Activating virtual environment..."
-source venv/bin/activate
+# Install uv via Homebrew if not present
+if ! command -v uv &> /dev/null; then
+    echo "Installing uv package manager via Homebrew..."
+    brew install uv
+fi
 
-echo "Upgrading pip..."
-pip install --upgrade pip
+# Keep HuggingFace cache local to this project
+export HF_HOME="$PROJECT_DIR/.hf_cache"
+mkdir -p "$HF_HOME"
 
-echo "Installing MLX-VLM and dependencies..."
-# mlx-vlm is the recommended package for running VLMs on Apple Silicon
-pip install mlx-vlm
+# Create venv with Python 3.12 (uv will download if needed)
+echo "Creating Python 3.12 virtual environment..."
+uv venv --python 3.12 venv
 
-# OpenCV for webcam capture
-pip install opencv-python
-
-# Pillow for image processing
-pip install pillow
+echo "Installing dependencies..."
+uv pip install --python venv/bin/python mlx-vlm opencv-python pillow
 
 echo ""
 echo "Downloading FastVLM model (0.5B FP16 - optimal for low latency)..."
 echo "Model: apple/FastVLM-0.5B-fp16"
 echo ""
-# Pre-download the model to cache for faster startup
-python3 -c "
+
+# Pre-download the model to cache
+venv/bin/python -c "
 from mlx_vlm import load
 print('Downloading and caching FastVLM-0.5B-fp16...')
 model, processor = load('apple/FastVLM-0.5B-fp16')
@@ -65,4 +96,12 @@ echo ""
 echo "To run the inference program:"
 echo "  source venv/bin/activate"
 echo "  python3 pete_sounds.py"
+echo ""
+echo "Self-contained installation:"
+echo "  - Python + packages:  ./venv/"
+echo "  - Model cache:        ./.hf_cache/"
+echo ""
+echo "To completely remove:"
+echo "  rm -rf $PROJECT_DIR"
+echo "  brew uninstall uv  # optional, if you don't need uv elsewhere"
 echo ""

@@ -1,0 +1,9 @@
+# Python virtual environment
+venv/
+
+# HuggingFace model cache (local to project)
+.hf_cache/
+
+# Python bytecode
+__pycache__/
+*.pyc

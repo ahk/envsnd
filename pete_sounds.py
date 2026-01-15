@@ -12,10 +12,14 @@ Press Ctrl-C to exit.
 """
 
 import argparse
+import os
 import signal
 import sys
 import time
 from pathlib import Path
+
+# Use local cache directory to avoid polluting ~/.cache/huggingface
+os.environ.setdefault("HF_HOME", str(Path(__file__).parent / ".hf_cache"))
 
 import cv2
 from PIL import Image
