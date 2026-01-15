@@ -1,0 +1,26 @@
+============================================================
+Pete-Sounds: Real-time Video Director
+============================================================
+Model: 2.2b (Slower, follows structured format)
+Resolution: 128x128
+Max tokens: 50
+Target FPS: 2.0
+Prompt: prompts/smolvlm2-2.2b-strict-output.md
+
+Press Ctrl-C to exit
+============================================================
+
+Loading director prompt...
+Loading mlx-community/SmolVLM2-2.2B-Instruct-mlx (this may take a moment)...
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 285975.27it/s]
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 331129.26it/s]
+Model loaded successfully!
+Initializing camera 0...
+Camera initialized!
+
+Starting inference loop... (output below)
+------------------------------------------------------------
+ color: gray
+mood: neutral
+person: standing
+object: chair
