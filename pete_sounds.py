@@ -135,7 +135,7 @@ def main():
         print("Error: mlx-vlm not installed. Run ./install.sh first.", file=sys.stderr)
         sys.exit(1)
 
-    model_path = "mlx-community/SmolVLM2-500M-Video-Instruct-mlx"
+    model_path = "mlx-community/SmolVLM2-2.2B-Instruct-mlx"
     model, processor = load(model_path)
     config = load_config(model_path)
 

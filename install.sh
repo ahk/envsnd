@@ -74,7 +74,7 @@ uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torch
 
 echo ""
 echo "Downloading SmolVLM2 model (500M BF16)..."
-echo "Model: mlx-community/SmolVLM2-500M-Video-Instruct-mlx"
+echo "Model: mlx-community/SmolVLM2-2.2B-Instruct-mlx"
 echo ""
 
 # Pre-download the model to cache
@@ -82,8 +82,8 @@ echo ""
 # FastVLM has loader bugs in mlx-vlm 0.3.9 (see ISSUES.md)
 venv/bin/python -c "
 from mlx_vlm import load
-print('Downloading and caching SmolVLM2-500M-Video-Instruct-mlx...')
-model, processor = load('mlx-community/SmolVLM2-500M-Video-Instruct-mlx')
+print('Downloading and caching SmolVLM2-2.2B-Instruct-mlx...')
+model, processor = load('mlx-community/SmolVLM2-2.2B-Instruct-mlx')
 print('Model cached successfully!')
 "
 

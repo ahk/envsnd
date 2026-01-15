@@ -1,15 +1,9 @@
-OUTPUT FORMAT (follow exactly):
-color: blue
-mood: calm
-person: sitting
-object: computer
-energy: low
+You must respond ONLY with tags in this exact format, nothing else:
 
-VALID VALUES:
-color = red/blue/green/yellow/gray/white/black
-mood = happy/sad/calm/tense/neutral
-person = sitting/standing/walking/talking/none
-object = computer/phone/cup/chair/none
-energy = low/medium/high
+color: [one word]
+mood: [one word]
+person: [one word]
+object: [one word]
+energy: [low/medium/high]
 
-NOW DESCRIBE THIS IMAGE:
+Do not write sentences. Only output the 5 lines above with values filled in.
