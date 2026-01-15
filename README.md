@@ -1,9 +1,10 @@
 Project Structure
 
   pete-sounds/
-  ├── install.sh        # Installation script for M4 Pro
+  ├── pete.py           # Main script: runs full pipeline
   ├── pete_sounds.py    # Director: webcam vision inference
   ├── composer.py       # Composer: real-time soundtrack generator
+  ├── install.sh        # Installation script for M4 Pro
   ├── prompts/          # Director prompt configurations
   │   ├── smolvlm2-2.2b.md
   │   ├── smolvlm2-2.2b-strict-output.md
@@ -18,15 +19,76 @@ Project Structure
   - FP16 precision (your 48GB RAM allows full precision without quantization penalty)                                
   - FastViTHD encoder outputs fewer tokens for lower latency                                                         
                                                                                                                      
-  Usage                                                                                                              
-                                                                                                                     
-  cd pete-sounds                                                                                                     
-  ./install.sh                    # Install dependencies & download model                                            
-  source venv/bin/activate                                                                                           
-  python3 pete_sounds.py          # Run with defaults                                                                
-  python3 pete_sounds.py --help   # See all options                                                                  
-                                                                                                                     
-  Latency Tuning                                                                                                     
+## Quick Start
+
+```bash
+cd pete-sounds
+./install.sh                    # Install dependencies & download model
+source venv/bin/activate
+python3 pete.py                 # Run full pipeline with audio
+```
+
+Press `Ctrl-C` to stop gracefully.
+
+## Main Script (pete.py)
+
+The main script orchestrates the full pipeline, interleaving director and composer
+output into a unified performance score.
+
+```bash
+# Basic usage - audio output only
+python3 pete.py
+
+# Record audio to MP3
+python3 pete.py --record session.mp3
+
+# Save score to file
+python3 pete.py --score performance.txt
+
+# Full session with recording and score
+python3 pete.py --record session.mp3 --score session_score.txt
+
+# Use faster model with slower tempo
+python3 pete.py --model 500m --bpm 160
+```
+
+### Options
+
+```
+--record, -r PATH    Record audio to MP3 file
+--score, -s PATH     Save interleaved score to file
+--model, -m SIZE     Vision model: 256m, 500m, 2.2b (default: 2.2b)
+--prompt, -p PATH    Custom prompt file
+--bpm N              Composer tempo (default: 174)
+--resolution N       Director frame resolution (default: 128)
+--max-tokens N       Director max tokens (default: 50)
+--no-audio           Disable audio playback
+```
+
+### Score Output
+
+The score interleaves director cues and composer state with timestamps:
+
+```
+[   5.23s] [DIR] color: blue
+[   5.23s] [DIR] mood: calm
+[   5.23s] [DIR] person: sitting
+[   5.23s] [DIR] object: computer
+[   5.54s] [MIX] Bar 4 | root=58 chord=maj7 scale=dorian density=0.30 intensity=0.21
+```
+
+- `[DIR]` - Director output (what the vision model sees)
+- `[MIX]` - Composer state (what music is being generated)
+- `[SYS]` - System messages (startup, shutdown, errors)
+
+## Director Only
+
+To run just the director (vision model) without the composer:
+
+  python3 pete_sounds.py          # Run with defaults
+  python3 pete_sounds.py --help   # See all options
+
+### Latency Tuning                                                                                                     
                                                                                                                      
   For lowest TBT latency, try:                                                                                       
   python3 pete_sounds.py --resolution 64 --max-tokens 20 --fps 1                                                     
