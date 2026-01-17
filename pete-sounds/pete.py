@@ -184,10 +184,14 @@ class Pipeline:
         # Output to stdout
         print(line, flush=True)
 
-        # Write to score file if specified
-        if self.score_file:
-            self.score_file.write(line + "\n")
-            self.score_file.flush()
+        # Write to score file if specified and not closed
+        if self.score_file and not self.score_file.closed:
+            try:
+                self.score_file.write(line + "\n")
+                self.score_file.flush()
+            except (ValueError, OSError):
+                # File was closed, ignore
+                pass
 
     def start(self):
         """Start the pipeline."""
@@ -407,12 +411,13 @@ class Pipeline:
                     proc.kill()
                     self.log("sys", f"{name.capitalize()} killed (timeout)")
 
-        # Close score file
+        # Write final messages and close score file
         if self.score_file:
             self.log("sys", f"Score saved to {self.score_path}")
+            self.log("sys", "Pipeline terminated")
             self.score_file.close()
-
-        self.log("sys", "Pipeline terminated")
+        else:
+            self.log("sys", "Pipeline terminated")
 
     def wait(self):
         """Wait for pipeline to finish."""
