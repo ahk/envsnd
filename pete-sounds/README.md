@@ -30,6 +30,22 @@ python3 pete.py                 # Run full pipeline with audio
 
 Press `Ctrl-C` to stop gracefully.
 
+### Manual Installation
+
+If you prefer to install dependencies manually:
+
+```bash
+# Create virtual environment
+python3.12 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download model (see install.sh for model options)
+python3 -c "from mlx_vlm import load; load('mlx-community/SmolVLM2-2.2B-Instruct-mlx')"
+```
+
 ## Main Script (pete.py)
 
 The main script orchestrates the full pipeline, interleaving director and composer
@@ -175,6 +191,26 @@ Use `--prompt-file` to select different output formats:
 - Python 3.12+
 - Webcam (tested with Logitech Brio)
 - ffmpeg (for MP3 encoding): `brew install ffmpeg`
+
+### Python Dependencies
+
+All Python dependencies are listed in `requirements.txt`. Install them with:
+
+```bash
+pip install -r requirements.txt
+```
+
+Or use the automated installation script:
+
+```bash
+./install.sh
+```
+
+The `install.sh` script will:
+- Install `uv` package manager (via Homebrew if needed)
+- Create a Python 3.12 virtual environment
+- Install all dependencies from `requirements.txt`
+- Download the selected MLX model(s)
 
 ## Sources
 

@@ -1,0 +1,18 @@
+# Core MLX Vision-Language Model dependencies
+mlx-vlm
+torch
+torchvision
+
+# Image processing
+opencv-python
+pillow
+
+# Audio/MIDI
+sounddevice
+mido
+
+# Text processing
+num2words
+
+# Numerical computing
+numpy

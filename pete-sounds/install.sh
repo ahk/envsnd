@@ -16,6 +16,10 @@ cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
 
 # Model definitions
+# WIP: zsh --version
+# 
+# Me: zsh 5.9 (arm64-apple-darwin25.0)
+# Pete: zsh 5.9 (arm64-apple-darwin24.0)
 declare -A MODELS
 MODELS[256m]="mlx-community/SmolVLM2-256M-Video-Instruct-mlx"
 MODELS[500m]="mlx-community/SmolVLM2-500M-Video-Instruct-mlx"
@@ -79,8 +83,8 @@ echo "Creating Python 3.12 virtual environment..."
 uv venv --python 3.12 venv
 
 echo "Installing dependencies..."
-# torch + torchvision + num2words required for SmolVLM2 video processor
-uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torchvision num2words sounddevice
+# Install from requirements.txt
+uv pip install --python venv/bin/python -r requirements.txt
 
 # Determine which models to download
 if [[ "${1}" == "all" ]]; then
