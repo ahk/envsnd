@@ -80,7 +80,7 @@ uv venv --python 3.12 venv
 
 echo "Installing dependencies..."
 # torch + torchvision + num2words required for SmolVLM2 video processor
-uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torchvision num2words
+uv pip install --python venv/bin/python mlx-vlm opencv-python pillow torch torchvision num2words sounddevice
 
 # Determine which models to download
 if [[ "${1}" == "all" ]]; then
