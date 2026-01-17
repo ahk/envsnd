@@ -10,6 +10,7 @@ pillow
 # Audio/MIDI
 sounddevice
 mido
+python-rtmidi  # Required for mido to access system MIDI ports on macOS
 
 # Text processing
 num2words
