@@ -815,6 +815,10 @@ class AudioEngine:
         self.record_path = record_path
         self.recorded_audio = []
         self.stream = None
+        self.total_samples_queued = 0  # Track total samples queued across all bars
+        self.samples_played = 0  # Track samples actually played (incremented in callback)
+        self.chunk_size = 2048
+        self.playback_lock = threading.Lock()  # Lock for thread-safe access to samples_played
 
     def audio_callback(self, outdata, frames, time_info, status):
         """Sounddevice callback for audio output."""
@@ -827,6 +831,10 @@ class AudioEngine:
             if len(data) < frames:
                 data = np.pad(data, (0, frames - len(data)))
             outdata[:, 0] = data[:frames]
+            
+            # Track samples played for MIDI timing
+            with self.playback_lock:
+                self.samples_played += len(data)
 
             # Record if enabled
             if self.record_path:
@@ -859,33 +867,21 @@ class AudioEngine:
 
     def queue_audio(self, samples: np.ndarray, midi_events: List[MidiEvent] = None, midi_output: Optional[MidiOutput] = None):
         """Queue audio samples for playback and send MIDI events at the correct timing."""
+        if not samples.size:
+            return
+        
+        # Calculate buffer delay: samples currently waiting to play
+        buffer_delay_samples = self.buffer.qsize() * self.chunk_size
+        
         # Sort MIDI events by sample position
         sorted_events = []
         if midi_events and midi_output and midi_output.port:
             sorted_events = sorted(midi_events, key=lambda e: e.sample_pos)
         
         # Split into chunks for smooth playback
-        chunk_size = 2048
-        current_sample = 0
-        event_index = 0  # Track which events we've already sent
+        chunk_size = self.chunk_size
         
         for i in range(0, len(samples), chunk_size):
-            chunk_start = current_sample
-            chunk_end = current_sample + chunk_size
-            
-            # Send MIDI events that occur in this chunk
-            if sorted_events and midi_output and midi_output.port:
-                while event_index < len(sorted_events):
-                    event = sorted_events[event_index]
-                    if event.sample_pos >= chunk_end:
-                        break  # Event is in a future chunk
-                    if chunk_start <= event.sample_pos < chunk_end:
-                        if event.is_note_on:
-                            midi_output.send_note_on(event.note, event.velocity, event.channel)
-                        else:
-                            midi_output.send_note_off(event.note, event.velocity, event.channel)
-                    event_index += 1
-            
             chunk = samples[i:i + chunk_size]
             if len(chunk) < chunk_size:
                 chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
@@ -894,9 +890,32 @@ class AudioEngine:
             except queue.Full:
                 pass  # Drop if buffer full
             
-            current_sample += chunk_size
-            
-            current_sample += chunk_size
+            self.total_samples_queued += chunk_size
+        
+        # Recalculate buffer delay after queuing (may have changed)
+        buffer_delay_samples = self.buffer.qsize() * self.chunk_size
+        
+        # Schedule MIDI events to fire at the correct time
+        # Event timing: when the audio at event.sample_pos within this bar will actually play
+        # Delay = buffer_delay + event.sample_pos (time from now until event plays)
+        if sorted_events and midi_output and midi_output.port:
+            for event in sorted_events:
+                # Calculate delay from now until this event should fire:
+                # Buffer delay (samples waiting to play) + event position within bar
+                delay_samples = buffer_delay_samples + event.sample_pos
+                
+                # Convert to seconds
+                delay_seconds = delay_samples / SAMPLE_RATE
+                
+                # Schedule MIDI event
+                def send_event(is_on, note, vel, chan):
+                    if is_on:
+                        midi_output.send_note_on(note, vel, chan)
+                    else:
+                        midi_output.send_note_off(note, vel, chan)
+                
+                threading.Timer(delay_seconds, send_event, 
+                              args=(event.is_note_on, event.note, event.velocity, event.channel)).start()
 
     def save_recording(self):
         """Save recorded audio to MP3."""
