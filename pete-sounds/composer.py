@@ -472,8 +472,9 @@ class BassSynth:
 class DrumSynth:
     """DnB drum machine - breakbeat style."""
 
-    def __init__(self):
+    def __init__(self, midi_output: Optional[MidiOutput] = None):
         self.osc = Oscillator()
+        self.midi_output = midi_output
 
     def kick(self, duration: float = 0.15) -> np.ndarray:
         """Punchy DnB kick."""
@@ -490,6 +491,14 @@ class DrumSynth:
         # Amplitude envelope
         amp_env = np.exp(-8 * t)
         signal = signal * amp_env
+
+        # Send MIDI note (kick = MIDI note 36, C1)
+        if self.midi_output and self.midi_output.port:
+            velocity = 100
+            self.midi_output.send_note_on(36, velocity=velocity, channel=3)
+            def note_off():
+                self.midi_output.send_note_off(36, velocity=velocity, channel=3)
+            threading.Timer(duration, note_off).start()
 
         return signal
 
@@ -509,6 +518,14 @@ class DrumSynth:
         # Highpass the noise
         noise = highpass_filter(noise, 2000)
 
+        # Send MIDI note (snare = MIDI note 38, D1)
+        if self.midi_output and self.midi_output.port:
+            velocity = 100
+            self.midi_output.send_note_on(38, velocity=velocity, channel=3)
+            def note_off():
+                self.midi_output.send_note_off(38, velocity=velocity, channel=3)
+            threading.Timer(duration, note_off).start()
+
         return tone + noise
 
     def hihat(self, duration: float = 0.05, open: bool = False) -> np.ndarray:
@@ -524,6 +541,15 @@ class DrumSynth:
         # Envelope
         decay = 5 if open else 30
         env = np.exp(-decay * t)
+
+        # Send MIDI note (hi-hat closed = 42/F#1, open = 46/A#1)
+        if self.midi_output and self.midi_output.port:
+            velocity = 80
+            note = 46 if open else 42
+            self.midi_output.send_note_on(note, velocity=velocity, channel=3)
+            def note_off():
+                self.midi_output.send_note_off(note, velocity=velocity, channel=3)
+            threading.Timer(dur, note_off).start()
 
         return noise * env
 
@@ -541,7 +567,7 @@ class PatternGenerator:
         self.lead = LeadSynth(midi_output)
         self.rhythm = RhythmSynth(midi_output)
         self.bass = BassSynth(midi_output)
-        self.drums = DrumSynth()
+        self.drums = DrumSynth(midi_output)
 
     def get_scale_notes(self, octave_range: int = 2) -> list:
         """Get available notes from current scale."""
