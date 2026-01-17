@@ -35,16 +35,18 @@ Press `Ctrl-C` to stop gracefully.
 If you prefer to install dependencies manually:
 
 ```bash
-# Create virtual environment
-python3.12 -m venv venv
+# Create virtual environment (uv venv doesn't include pip by default)
+uv venv --python 3.12 venv
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies using uv pip (faster than regular pip)
+uv pip install -r requirements.txt
 
-# Download model (see install.sh for model options)
+# Download model
 python3 -c "from mlx_vlm import load; load('mlx-community/SmolVLM2-2.2B-Instruct-mlx')"
 ```
+
+**Note:** When using `uv venv`, the idiomatic approach is to use `uv pip install` instead of `pip install`. If you want to use regular `pip`, you can add `--seed` to `uv venv` to include pip in the environment, but `uv pip` is faster and recommended.
 
 ## Main Script (pete.py)
 
@@ -194,14 +196,9 @@ Use `--prompt-file` to select different output formats:
 
 ### Python Dependencies
 
-All Python dependencies are listed in `requirements.txt`. Install them with:
+All Python dependencies are listed in `requirements.txt`. 
 
-```bash
-pip install -r requirements.txt
-```
-
-Or use the automated installation script:
-
+**If using the automated installation script:**
 ```bash
 ./install.sh
 ```
@@ -209,8 +206,13 @@ Or use the automated installation script:
 The `install.sh` script will:
 - Install `uv` package manager (via Homebrew if needed)
 - Create a Python 3.12 virtual environment
-- Install all dependencies from `requirements.txt`
+- Install all dependencies from `requirements.txt` using `uv pip install` (faster than regular pip)
 - Download the selected MLX model(s)
+
+**If installing manually:**
+- **Using `python3 -m venv`**: Use `pip install -r requirements.txt` (standard Python workflow)
+- **Using `uv venv`**: Use `uv pip install -r requirements.txt` (idiomatic uv workflow, faster)
+  - Note: `uv venv` doesn't include pip by default. Use `uv pip` commands instead, or add `--seed` if you prefer regular `pip`
 
 ## Sources
 
