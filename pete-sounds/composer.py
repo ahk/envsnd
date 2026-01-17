@@ -37,6 +37,14 @@ except ImportError:
     print("Error: sounddevice not installed. Run: pip install sounddevice", file=sys.stderr)
     sys.exit(1)
 
+# Attempt to import MIDI library
+try:
+    import mido
+    MIDI_AVAILABLE = True
+except ImportError:
+    MIDI_AVAILABLE = False
+    print("Warning: mido not installed. MIDI output disabled. Install with: pip install mido", file=sys.stderr)
+
 
 # ============================================================================
 # Musical Constants
@@ -267,15 +275,71 @@ def highpass_filter(signal: np.ndarray, cutoff: float, sample_rate: int = SAMPLE
 
 
 # ============================================================================
+# MIDI Output
+# ============================================================================
+
+class MidiOutput:
+    """MIDI output handler for IAC Driver Bus 1."""
+
+    def __init__(self, port_name: str = "IAC Driver Bus 1"):
+        self.port = None
+        self.port_name = port_name
+        if not MIDI_AVAILABLE:
+            return
+
+        try:
+            # Try to open the specified port
+            self.port = mido.open_output(port_name)
+            print(f"MIDI output connected to: {port_name}", file=sys.stderr)
+        except (OSError, IOError) as e:
+            print(f"Warning: Could not open MIDI port '{port_name}': {e}", file=sys.stderr)
+            print("Available MIDI ports:", file=sys.stderr)
+            try:
+                for name in mido.get_output_names():
+                    print(f"  - {name}", file=sys.stderr)
+            except:
+                pass
+            self.port = None
+
+    def send_note_on(self, note: int, velocity: int = 64, channel: int = 0):
+        """Send MIDI Note On message."""
+        if self.port:
+            try:
+                msg = mido.Message('note_on', note=note, velocity=velocity, channel=channel)
+                self.port.send(msg)
+            except Exception as e:
+                print(f"MIDI send error: {e}", file=sys.stderr)
+
+    def send_note_off(self, note: int, velocity: int = 64, channel: int = 0):
+        """Send MIDI Note Off message."""
+        if self.port:
+            try:
+                msg = mido.Message('note_off', note=note, velocity=velocity, channel=channel)
+                self.port.send(msg)
+            except Exception as e:
+                print(f"MIDI send error: {e}", file=sys.stderr)
+
+    def close(self):
+        """Close MIDI port."""
+        if self.port:
+            try:
+                self.port.close()
+            except:
+                pass
+            self.port = None
+
+
+# ============================================================================
 # Instrument Voices
 # ============================================================================
 
 class LeadSynth:
     """Jazz lead synth - smooth, expressive."""
 
-    def __init__(self):
+    def __init__(self, midi_output: Optional[MidiOutput] = None):
         self.osc = Oscillator()
         self.last_note = 60
+        self.midi_output = midi_output
 
     def play_note(self, midi_note: int, duration: float, state: DirectorState) -> np.ndarray:
         freq = midi_to_freq(midi_note)
@@ -303,6 +367,15 @@ class LeadSynth:
         # Lowpass for warmth
         signal = lowpass_filter(signal, 3000 + 2000 * state.intensity)
 
+        # Send MIDI note
+        if self.midi_output and self.midi_output.port:
+            velocity = int(64 + 63 * state.intensity)
+            self.midi_output.send_note_on(midi_note, velocity=velocity, channel=0)
+            # Schedule note off after duration
+            def note_off():
+                self.midi_output.send_note_off(midi_note, velocity=velocity, channel=0)
+            threading.Timer(duration, note_off).start()
+
         self.last_note = midi_note
         return signal * state.intensity * 0.5
 
@@ -310,8 +383,9 @@ class LeadSynth:
 class RhythmSynth:
     """Jazz chord rhythm section - Rhodes-like."""
 
-    def __init__(self):
+    def __init__(self, midi_output: Optional[MidiOutput] = None):
         self.osc = Oscillator()
+        self.midi_output = midi_output
 
     def play_chord(self, root: int, chord_type: str, duration: float,
                    state: DirectorState) -> np.ndarray:
@@ -345,14 +419,26 @@ class RhythmSynth:
         env = adsr_envelope(duration, 0.01, 0.2, 0.5, 0.3)
         signal = signal[:len(env)] * env
 
+        # Send MIDI notes for chord
+        if self.midi_output and self.midi_output.port:
+            velocity = int(64 + 63 * state.intensity)
+            for note in notes:
+                self.midi_output.send_note_on(note, velocity=velocity, channel=1)
+            # Schedule note offs after duration
+            def chord_off():
+                for note in notes:
+                    self.midi_output.send_note_off(note, velocity=velocity, channel=1)
+            threading.Timer(duration, chord_off).start()
+
         return signal * state.intensity * 0.4
 
 
 class BassSynth:
     """DnB sub-bass with jazzy notes."""
 
-    def __init__(self):
+    def __init__(self, midi_output: Optional[MidiOutput] = None):
         self.osc = Oscillator()
+        self.midi_output = midi_output
 
     def play_note(self, midi_note: int, duration: float, state: DirectorState) -> np.ndarray:
         # Sub-bass: one octave down
@@ -370,6 +456,15 @@ class BassSynth:
 
         # Heavy lowpass
         signal = lowpass_filter(signal, 200 + 100 * state.intensity)
+
+        # Send MIDI note (use the original note, not the transposed one)
+        if self.midi_output and self.midi_output.port:
+            velocity = int(64 + 63 * state.intensity)
+            self.midi_output.send_note_on(midi_note, velocity=velocity, channel=2)
+            # Schedule note off after duration
+            def note_off():
+                self.midi_output.send_note_off(midi_note, velocity=velocity, channel=2)
+            threading.Timer(duration, note_off).start()
 
         return signal * state.intensity * 0.7
 
@@ -440,12 +535,12 @@ class DrumSynth:
 class PatternGenerator:
     """Generates musical patterns based on director state."""
 
-    def __init__(self, state: DirectorState):
+    def __init__(self, state: DirectorState, midi_output: Optional[MidiOutput] = None):
         self.state = state
         self.bar_count = 0
-        self.lead = LeadSynth()
-        self.rhythm = RhythmSynth()
-        self.bass = BassSynth()
+        self.lead = LeadSynth(midi_output)
+        self.rhythm = RhythmSynth(midi_output)
+        self.bass = BassSynth(midi_output)
         self.drums = DrumSynth()
 
     def get_scale_notes(self, octave_range: int = 2) -> list:
@@ -870,9 +965,22 @@ def main():
     print("=" * 60, file=sys.stderr)
     print("", file=sys.stderr)
 
+    # Initialize MIDI output
+    midi_output = None
+    if MIDI_AVAILABLE:
+        midi = MidiOutput("IAC Driver Bus 1")
+        # Only use MIDI output if port was successfully opened
+        if midi.port is not None:
+            midi_output = midi
+            print(f"MIDI output enabled: port={midi.port_name}", file=sys.stderr)
+        else:
+            print("MIDI output disabled: port could not be opened", file=sys.stderr)
+    else:
+        print("MIDI output disabled: mido not available", file=sys.stderr)
+
     # Initialize components
     state = DirectorState()
-    pattern_gen = PatternGenerator(state)
+    pattern_gen = PatternGenerator(state, midi_output)
     parser = DirectorParser()
     score_log = ScoreLogger()
 
@@ -887,6 +995,8 @@ def main():
         print("\n\nShutting down composer...", file=sys.stderr)
         if audio:
             audio.stop()
+        if midi_output:
+            midi_output.close()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
@@ -938,6 +1048,8 @@ def main():
     finally:
         if audio:
             audio.stop()
+        if midi_output:
+            midi_output.close()
         print("\nComposer terminated.", file=sys.stderr)
 
 
