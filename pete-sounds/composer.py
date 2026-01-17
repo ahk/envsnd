@@ -26,7 +26,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import numpy as np
 
@@ -278,6 +278,16 @@ def highpass_filter(signal: np.ndarray, cutoff: float, sample_rate: int = SAMPLE
 # MIDI Output
 # ============================================================================
 
+@dataclass
+class MidiEvent:
+    """MIDI event with sample position."""
+    sample_pos: int  # Position in samples from start of bar
+    note: int
+    velocity: int
+    channel: int
+    is_note_on: bool  # True for note_on, False for note_off
+
+
 class MidiOutput:
     """MIDI output handler for IAC Driver Bus 1."""
 
@@ -336,12 +346,11 @@ class MidiOutput:
 class LeadSynth:
     """Jazz lead synth - smooth, expressive."""
 
-    def __init__(self, midi_output: Optional[MidiOutput] = None):
+    def __init__(self):
         self.osc = Oscillator()
         self.last_note = 60
-        self.midi_output = midi_output
 
-    def play_note(self, midi_note: int, duration: float, state: DirectorState) -> np.ndarray:
+    def play_note(self, midi_note: int, duration: float, state: DirectorState, sample_offset: int = 0) -> Tuple[np.ndarray, List[MidiEvent]]:
         freq = midi_to_freq(midi_note)
 
         # Mix of triangle and sine for warm jazz tone
@@ -367,28 +376,27 @@ class LeadSynth:
         # Lowpass for warmth
         signal = lowpass_filter(signal, 3000 + 2000 * state.intensity)
 
-        # Send MIDI note
-        if self.midi_output and self.midi_output.port:
-            velocity = int(64 + 63 * state.intensity)
-            self.midi_output.send_note_on(midi_note, velocity=velocity, channel=0)
-            # Schedule note off after duration
-            def note_off():
-                self.midi_output.send_note_off(midi_note, velocity=velocity, channel=0)
-            threading.Timer(duration, note_off).start()
+        # Create MIDI events
+        velocity = int(64 + 63 * state.intensity)
+        note_on_sample = sample_offset
+        note_off_sample = sample_offset + int(duration * SAMPLE_RATE)
+        midi_events = [
+            MidiEvent(note_on_sample, midi_note, velocity, 0, True),
+            MidiEvent(note_off_sample, midi_note, velocity, 0, False)
+        ]
 
         self.last_note = midi_note
-        return signal * state.intensity * 0.5
+        return signal * state.intensity * 0.5, midi_events
 
 
 class RhythmSynth:
     """Jazz chord rhythm section - Rhodes-like."""
 
-    def __init__(self, midi_output: Optional[MidiOutput] = None):
+    def __init__(self):
         self.osc = Oscillator()
-        self.midi_output = midi_output
 
     def play_chord(self, root: int, chord_type: str, duration: float,
-                   state: DirectorState) -> np.ndarray:
+                   state: DirectorState, sample_offset: int = 0) -> Tuple[np.ndarray, List[MidiEvent]]:
         intervals = CHORDS.get(chord_type, CHORDS["dom7"])
 
         # Voice the chord in a jazzy way (spread voicing)
@@ -419,28 +427,25 @@ class RhythmSynth:
         env = adsr_envelope(duration, 0.01, 0.2, 0.5, 0.3)
         signal = signal[:len(env)] * env
 
-        # Send MIDI notes for chord
-        if self.midi_output and self.midi_output.port:
-            velocity = int(64 + 63 * state.intensity)
-            for note in notes:
-                self.midi_output.send_note_on(note, velocity=velocity, channel=1)
-            # Schedule note offs after duration
-            def chord_off():
-                for note in notes:
-                    self.midi_output.send_note_off(note, velocity=velocity, channel=1)
-            threading.Timer(duration, chord_off).start()
+        # Create MIDI events for chord
+        velocity = int(64 + 63 * state.intensity)
+        note_on_sample = sample_offset
+        note_off_sample = sample_offset + int(duration * SAMPLE_RATE)
+        midi_events = []
+        for note in notes:
+            midi_events.append(MidiEvent(note_on_sample, note, velocity, 1, True))
+            midi_events.append(MidiEvent(note_off_sample, note, velocity, 1, False))
 
-        return signal * state.intensity * 0.4
+        return signal * state.intensity * 0.4, midi_events
 
 
 class BassSynth:
     """DnB sub-bass with jazzy notes."""
 
-    def __init__(self, midi_output: Optional[MidiOutput] = None):
+    def __init__(self):
         self.osc = Oscillator()
-        self.midi_output = midi_output
 
-    def play_note(self, midi_note: int, duration: float, state: DirectorState) -> np.ndarray:
+    def play_note(self, midi_note: int, duration: float, state: DirectorState, sample_offset: int = 0) -> Tuple[np.ndarray, List[MidiEvent]]:
         # Sub-bass: one octave down
         freq = midi_to_freq(midi_note - 12)
 
@@ -457,26 +462,25 @@ class BassSynth:
         # Heavy lowpass
         signal = lowpass_filter(signal, 200 + 100 * state.intensity)
 
-        # Send MIDI note (use the original note, not the transposed one)
-        if self.midi_output and self.midi_output.port:
-            velocity = int(64 + 63 * state.intensity)
-            self.midi_output.send_note_on(midi_note, velocity=velocity, channel=2)
-            # Schedule note off after duration
-            def note_off():
-                self.midi_output.send_note_off(midi_note, velocity=velocity, channel=2)
-            threading.Timer(duration, note_off).start()
+        # Create MIDI events (use the original note, not the transposed one)
+        velocity = int(64 + 63 * state.intensity)
+        note_on_sample = sample_offset
+        note_off_sample = sample_offset + int(duration * SAMPLE_RATE)
+        midi_events = [
+            MidiEvent(note_on_sample, midi_note, velocity, 2, True),
+            MidiEvent(note_off_sample, midi_note, velocity, 2, False)
+        ]
 
-        return signal * state.intensity * 0.7
+        return signal * state.intensity * 0.7, midi_events
 
 
 class DrumSynth:
     """DnB drum machine - breakbeat style."""
 
-    def __init__(self, midi_output: Optional[MidiOutput] = None):
+    def __init__(self):
         self.osc = Oscillator()
-        self.midi_output = midi_output
 
-    def kick(self, duration: float = 0.15) -> np.ndarray:
+    def kick(self, duration: float = 0.15, sample_offset: int = 0) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Punchy DnB kick."""
         samples = int(SAMPLE_RATE * duration)
         t = np.linspace(0, duration, samples, False)
@@ -492,17 +496,18 @@ class DrumSynth:
         amp_env = np.exp(-8 * t)
         signal = signal * amp_env
 
-        # Send MIDI note (kick = MIDI note 36, C1)
-        if self.midi_output and self.midi_output.port:
-            velocity = 100
-            self.midi_output.send_note_on(36, velocity=velocity, channel=3)
-            def note_off():
-                self.midi_output.send_note_off(36, velocity=velocity, channel=3)
-            threading.Timer(duration, note_off).start()
+        # Create MIDI events (kick = MIDI note 36, C1)
+        velocity = 100
+        note_on_sample = sample_offset
+        note_off_sample = sample_offset + int(duration * SAMPLE_RATE)
+        midi_events = [
+            MidiEvent(note_on_sample, 36, velocity, 3, True),
+            MidiEvent(note_off_sample, 36, velocity, 3, False)
+        ]
 
-        return signal
+        return signal, midi_events
 
-    def snare(self, duration: float = 0.15) -> np.ndarray:
+    def snare(self, duration: float = 0.15, sample_offset: int = 0) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Punchy DnB snare with noise."""
         samples = int(SAMPLE_RATE * duration)
         t = np.linspace(0, duration, samples, False)
@@ -518,17 +523,18 @@ class DrumSynth:
         # Highpass the noise
         noise = highpass_filter(noise, 2000)
 
-        # Send MIDI note (snare = MIDI note 38, D1)
-        if self.midi_output and self.midi_output.port:
-            velocity = 100
-            self.midi_output.send_note_on(38, velocity=velocity, channel=3)
-            def note_off():
-                self.midi_output.send_note_off(38, velocity=velocity, channel=3)
-            threading.Timer(duration, note_off).start()
+        # Create MIDI events (snare = MIDI note 38, D1)
+        velocity = 100
+        note_on_sample = sample_offset
+        note_off_sample = sample_offset + int(duration * SAMPLE_RATE)
+        midi_events = [
+            MidiEvent(note_on_sample, 38, velocity, 3, True),
+            MidiEvent(note_off_sample, 38, velocity, 3, False)
+        ]
 
-        return tone + noise
+        return tone + noise, midi_events
 
-    def hihat(self, duration: float = 0.05, open: bool = False) -> np.ndarray:
+    def hihat(self, duration: float = 0.05, open: bool = False, sample_offset: int = 0) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Hi-hat - closed or open."""
         dur = duration * (3 if open else 1)
         samples = int(SAMPLE_RATE * dur)
@@ -542,16 +548,17 @@ class DrumSynth:
         decay = 5 if open else 30
         env = np.exp(-decay * t)
 
-        # Send MIDI note (hi-hat closed = 42/F#1, open = 46/A#1)
-        if self.midi_output and self.midi_output.port:
-            velocity = 80
-            note = 46 if open else 42
-            self.midi_output.send_note_on(note, velocity=velocity, channel=3)
-            def note_off():
-                self.midi_output.send_note_off(note, velocity=velocity, channel=3)
-            threading.Timer(dur, note_off).start()
+        # Create MIDI events (hi-hat closed = 42/F#1, open = 46/A#1)
+        velocity = 80
+        note = 46 if open else 42
+        note_on_sample = sample_offset
+        note_off_sample = sample_offset + int(dur * SAMPLE_RATE)
+        midi_events = [
+            MidiEvent(note_on_sample, note, velocity, 3, True),
+            MidiEvent(note_off_sample, note, velocity, 3, False)
+        ]
 
-        return noise * env
+        return noise * env, midi_events
 
 
 # ============================================================================
@@ -561,13 +568,13 @@ class DrumSynth:
 class PatternGenerator:
     """Generates musical patterns based on director state."""
 
-    def __init__(self, state: DirectorState, midi_output: Optional[MidiOutput] = None):
+    def __init__(self, state: DirectorState):
         self.state = state
         self.bar_count = 0
-        self.lead = LeadSynth(midi_output)
-        self.rhythm = RhythmSynth(midi_output)
-        self.bass = BassSynth(midi_output)
-        self.drums = DrumSynth(midi_output)
+        self.lead = LeadSynth()
+        self.rhythm = RhythmSynth()
+        self.bass = BassSynth()
+        self.drums = DrumSynth()
 
     def get_scale_notes(self, octave_range: int = 2) -> list:
         """Get available notes from current scale."""
@@ -578,10 +585,11 @@ class PatternGenerator:
                 notes.append(self.state.root_note + interval + octave * 12)
         return notes
 
-    def generate_lead_phrase(self, duration: float) -> np.ndarray:
+    def generate_lead_phrase(self, duration: float) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Generate a melodic phrase."""
         samples = int(SAMPLE_RATE * duration)
         signal = np.zeros(samples)
+        midi_events = []
 
         scale_notes = self.get_scale_notes()
 
@@ -608,19 +616,21 @@ class PatternGenerator:
             if np.random.random() > self.state.density:
                 continue
 
-            note_signal = self.lead.play_note(note, note_duration * 0.9, self.state)
             start = int(i * note_duration * SAMPLE_RATE)
+            note_signal, events = self.lead.play_note(note, note_duration * 0.9, self.state, start)
+            midi_events.extend(events)
             end = min(start + len(note_signal), samples)
             signal[start:end] += note_signal[:end - start]
 
             current_note = note
 
-        return signal
+        return signal, midi_events
 
-    def generate_rhythm_pattern(self, duration: float) -> np.ndarray:
+    def generate_rhythm_pattern(self, duration: float) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Generate chord rhythm pattern."""
         samples = int(SAMPLE_RATE * duration)
         signal = np.zeros(samples)
+        midi_events = []
 
         # Jazz comping pattern - syncopated hits
         beat_samples = int(SAMPLE_RATE * BEAT_DURATION / self.state.tempo_mult)
@@ -637,22 +647,25 @@ class PatternGenerator:
                 continue
 
             chord_dur = BEAT_DURATION * (0.3 + 0.3 * np.random.random())
-            chord = self.rhythm.play_chord(
+            chord, events = self.rhythm.play_chord(
                 self.state.root_note,
                 self.state.chord_type,
                 chord_dur,
-                self.state
+                self.state,
+                start
             )
+            midi_events.extend(events)
 
             end = min(start + len(chord), samples)
             signal[start:end] += chord[:end - start]
 
-        return signal
+        return signal, midi_events
 
-    def generate_bass_pattern(self, duration: float) -> np.ndarray:
+    def generate_bass_pattern(self, duration: float) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Generate DnB bass pattern."""
         samples = int(SAMPLE_RATE * duration)
         signal = np.zeros(samples)
+        midi_events = []
 
         beat_samples = int(SAMPLE_RATE * BEAT_DURATION / self.state.tempo_mult)
 
@@ -676,16 +689,18 @@ class PatternGenerator:
             if start >= samples:
                 continue
 
-            bass_note = self.bass.play_note(note, dur, self.state)
+            bass_note, events = self.bass.play_note(note, dur, self.state, start)
+            midi_events.extend(events)
             end = min(start + len(bass_note), samples)
             signal[start:end] += bass_note[:end - start]
 
-        return signal
+        return signal, midi_events
 
-    def generate_drum_pattern(self, duration: float) -> np.ndarray:
+    def generate_drum_pattern(self, duration: float) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Generate DnB breakbeat pattern."""
         samples = int(SAMPLE_RATE * duration)
         signal = np.zeros(samples)
+        midi_events = []
 
         beat_samples = int(SAMPLE_RATE * BEAT_DURATION / self.state.tempo_mult)
         sixteenth = beat_samples // 4
@@ -703,7 +718,8 @@ class PatternGenerator:
             start = int(beat_pos * beat_samples)
             if start >= samples:
                 continue
-            kick = self.drums.kick()
+            kick, events = self.drums.kick(sample_offset=start)
+            midi_events.extend(events)
             end = min(start + len(kick), samples)
             signal[start:end] += kick[:end - start] * self.state.intensity
 
@@ -712,7 +728,8 @@ class PatternGenerator:
             start = int(beat_pos * beat_samples)
             if start >= samples:
                 continue
-            snare = self.drums.snare()
+            snare, events = self.drums.snare(sample_offset=start)
+            midi_events.extend(events)
             end = min(start + len(snare), samples)
             signal[start:end] += snare[:end - start] * self.state.intensity
 
@@ -726,24 +743,28 @@ class PatternGenerator:
                 continue
 
             is_open = np.random.random() < 0.1
-            hh = self.drums.hihat(open=is_open)
+            hh, events = self.drums.hihat(open=is_open, sample_offset=start)
+            midi_events.extend(events)
             end = min(start + len(hh), samples)
             signal[start:end] += hh[:end - start] * self.state.intensity * 0.7
 
-        return signal
+        return signal, midi_events
 
-    def generate_bar(self) -> np.ndarray:
+    def generate_bar(self) -> Tuple[np.ndarray, List[MidiEvent]]:
         """Generate one bar of music with all channels."""
         duration = BAR_DURATION / self.state.tempo_mult
 
         # Generate each channel
-        lead = self.generate_lead_phrase(duration)
-        rhythm = self.generate_rhythm_pattern(duration)
-        bass = self.generate_bass_pattern(duration)
-        drums = self.generate_drum_pattern(duration)
+        lead_signal, lead_events = self.generate_lead_phrase(duration)
+        rhythm_signal, rhythm_events = self.generate_rhythm_pattern(duration)
+        bass_signal, bass_events = self.generate_bass_pattern(duration)
+        drums_signal, drums_events = self.generate_drum_pattern(duration)
+
+        # Collect all MIDI events
+        all_midi_events = lead_events + rhythm_events + bass_events + drums_events
 
         # Ensure all same length
-        max_len = max(len(lead), len(rhythm), len(bass), len(drums))
+        max_len = max(len(lead_signal), len(rhythm_signal), len(bass_signal), len(drums_signal))
 
         def pad(arr):
             if len(arr) < max_len:
@@ -751,13 +772,13 @@ class PatternGenerator:
             return arr[:max_len]
 
         # Mix channels
-        mix = pad(lead) + pad(rhythm) + pad(bass) + pad(drums)
+        mix = pad(lead_signal) + pad(rhythm_signal) + pad(bass_signal) + pad(drums_signal)
 
         # Soft clip / tanh saturation
         mix = np.tanh(mix * 0.8) * 0.9
 
         self.bar_count += 1
-        return mix
+        return mix, all_midi_events
 
 
 # ============================================================================
@@ -836,11 +857,35 @@ class AudioEngine:
         if self.record_path and self.recorded_audio:
             self.save_recording()
 
-    def queue_audio(self, samples: np.ndarray):
-        """Queue audio samples for playback."""
+    def queue_audio(self, samples: np.ndarray, midi_events: List[MidiEvent] = None, midi_output: Optional[MidiOutput] = None):
+        """Queue audio samples for playback and send MIDI events at the correct timing."""
+        # Sort MIDI events by sample position
+        sorted_events = []
+        if midi_events and midi_output and midi_output.port:
+            sorted_events = sorted(midi_events, key=lambda e: e.sample_pos)
+        
         # Split into chunks for smooth playback
         chunk_size = 2048
+        current_sample = 0
+        event_index = 0  # Track which events we've already sent
+        
         for i in range(0, len(samples), chunk_size):
+            chunk_start = current_sample
+            chunk_end = current_sample + chunk_size
+            
+            # Send MIDI events that occur in this chunk
+            if sorted_events and midi_output and midi_output.port:
+                while event_index < len(sorted_events):
+                    event = sorted_events[event_index]
+                    if event.sample_pos >= chunk_end:
+                        break  # Event is in a future chunk
+                    if chunk_start <= event.sample_pos < chunk_end:
+                        if event.is_note_on:
+                            midi_output.send_note_on(event.note, event.velocity, event.channel)
+                        else:
+                            midi_output.send_note_off(event.note, event.velocity, event.channel)
+                    event_index += 1
+            
             chunk = samples[i:i + chunk_size]
             if len(chunk) < chunk_size:
                 chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
@@ -848,6 +893,10 @@ class AudioEngine:
                 self.buffer.put(chunk.astype(np.float32), timeout=0.5)
             except queue.Full:
                 pass  # Drop if buffer full
+            
+            current_sample += chunk_size
+            
+            current_sample += chunk_size
 
     def save_recording(self):
         """Save recorded audio to MP3."""
@@ -1006,7 +1055,7 @@ def main():
 
     # Initialize components
     state = DirectorState()
-    pattern_gen = PatternGenerator(state, midi_output)
+    pattern_gen = PatternGenerator(state)
     parser = DirectorParser()
     score_log = ScoreLogger()
 
@@ -1061,10 +1110,10 @@ def main():
                 bar_count += 1
 
                 # Generate and play bar
-                bar_audio = pattern_gen.generate_bar()
+                bar_audio, bar_midi_events = pattern_gen.generate_bar()
 
                 if audio:
-                    audio.queue_audio(bar_audio)
+                    audio.queue_audio(bar_audio, bar_midi_events, midi_output)
 
                 # Log to score output
                 score_log.log_state(state, bar_count)
